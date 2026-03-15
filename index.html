@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Reachy Mini - Pollen Robotics</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Local Setup View -->
+    <div id="loginView" class="login-view">
+        <div class="login-card">
+            <h2>Reachy Mini</h2>
+            <p>Connect directly to a Reachy Mini on your local network. Enter the robot hostname or IP address, then open the local WebRTC session.</p>
+            <div class="setup-form">
+                <label class="setup-label" for="hostInput">Robot host</label>
+                <input id="hostInput" class="setup-input" type="text" placeholder="reachy-mini.local or 192.168.1.18">
+                <div class="setup-hint">The app will connect to ws://&lt;host&gt;:8443.</div>
+            </div>
+            <button class="btn-local" onclick="applyLocalHost()">Use local robot</button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-text">Reachy Mini <span>by Pollen Robotics</span></div>
+            </div>
+            <div class="user-section">
+                <div class="user-badge"><span id="currentHost">local</span></div>
+                <button class="btn-logout" onclick="showSetup()">Change host</button>
+            </div>
+        </header>
+
+        <div class="app-container">
+            <!-- Video -->
+            <div class="video-container">
+                <video id="remoteVideo" autoplay playsinline muted></video>
+
+                <div class="video-overlay-top">
+                    <div class="connection-badge">
+                        <div class="status-indicator" id="statusIndicator"></div>
+                        <span id="statusText">Disconnected</span>
+                    </div>
+                    <div class="robot-name" id="robotName"></div>
+                    <div class="latency-badge hidden" id="latencyBadge">
+                        <span id="latencyValue">--</span>
+                    </div>
+                </div>
+
+                <div class="video-overlay-bottom">
+                    <div class="video-controls">
+                        <button class="btn btn-secondary" id="connectBtn" onclick="connectSignaling()">Connect</button>
+                        <button class="btn btn-primary" id="startBtn" onclick="startStream()" disabled>Start</button>
+                        <button class="btn btn-danger" id="stopBtn" onclick="stopStream()" disabled>Stop</button>
+                        <button class="btn btn-mute muted" id="muteBtn" onclick="toggleMute()" disabled>
+                            <svg id="speakerOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <line x1="23" y1="9" x2="17" y2="15"></line>
+                                <line x1="17" y1="9" x2="23" y2="15"></line>
+                            </svg>
+                            <svg id="speakerOnIcon" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            </svg>
+                            <span id="muteText">Unmute</span>
+                        </button>
+                        <button class="btn btn-mute muted" id="micBtn" onclick="toggleMic()" disabled>
+                            <svg id="micOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="1" y1="1" x2="23" y2="23"></line>
+                                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+                                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2c0 .76-.13 1.49-.35 2.17"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                            <svg id="micOnIcon" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                            <span id="micText">Mic Off</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Robot Selector -->
+            <div id="robotSelector" class="panel hidden">
+                <div class="panel-header">Available Robots</div>
+                <div class="panel-content">
+                    <div id="robotList" class="robot-list">
+                        <div style="color: var(--text-muted); font-size: 0.85em;">Searching...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Head Control - RPY Sliders -->
+            <div class="panel">
+                <div class="panel-header">Head Orientation</div>
+                <div class="panel-content">
+                    <div class="slider-row">
+                        <span class="slider-label">Roll</span>
+                        <input type="range" class="slider" id="rollSlider" min="-20" max="20" value="0" step="0.5">
+                        <span class="slider-value" id="rollValue">0.0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <span class="slider-label">Pitch</span>
+                        <input type="range" class="slider" id="pitchSlider" min="-30" max="30" value="0" step="0.5">
+                        <span class="slider-value" id="pitchValue">0.0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <span class="slider-label">Yaw</span>
+                        <input type="range" class="slider" id="yawSlider" min="-45" max="45" value="0" step="0.5">
+                        <span class="slider-value" id="yawValue">0.0°</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Antennas -->
+            <div class="panel">
+                <div class="panel-header">Antennas</div>
+                <div class="panel-content">
+                    <div class="slider-row">
+                        <span class="slider-label">Right</span>
+                        <input type="range" class="slider" id="rightAntSlider" min="-175" max="175" value="0">
+                        <span class="slider-value" id="rightAntValue">0°</span>
+                    </div>
+                    <div class="slider-row">
+                        <span class="slider-label">Left</span>
+                        <input type="range" class="slider" id="leftAntSlider" min="-175" max="175" value="0">
+                        <span class="slider-value" id="leftAntValue">0°</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sound -->
+            <div class="panel">
+                <div class="panel-header">Sound</div>
+                <div class="panel-content">
+                    <div class="sound-row">
+                        <input type="text" class="sound-input" id="soundInput" placeholder="Sound file...">
+                        <button class="btn btn-primary" id="btnPlaySound" onclick="playSound()" disabled>Play</button>
+                    </div>
+                    <div class="sound-presets">
+                        <span class="preset-chip" onclick="playSoundPreset('wake_up.wav')">wake_up</span>
+                        <span class="preset-chip" onclick="playSoundPreset('go_sleep.wav')">go_sleep</span>
+                        <span class="preset-chip" onclick="playSoundPreset('yes.wav')">yes</span>
+                        <span class="preset-chip" onclick="playSoundPreset('no.wav')">no</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { ReachyMini } from "./reachy-mini.js";
+        const HOST_STORAGE_KEY = 'reachy-local-host';
+        let robot = null;
+        let selectedRobotId = null;
+        let headSlidersActive = false;
+        let detachVideo = null;
+        let latencyIntervalId = null;
+
+        function defaultHost() {
+            return 'reachy-mini.local';
+        }
+
+        function normalizeHost(value) {
+            const trimmed = (value || '').trim();
+            if (!trimmed) return '';
+            try {
+                if (/^https?:\/\//i.test(trimmed) || /^wss?:\/\//i.test(trimmed)) {
+                    return new URL(trimmed).host;
+                }
+            } catch (_) {
+                // Fall through and use the raw value.
+            }
+            return trimmed.replace(/^\/+|\/+$/g, '');
+        }
+
+        function getSavedHost() {
+            return normalizeHost(localStorage.getItem(HOST_STORAGE_KEY) || '') || defaultHost();
+        }
+
+        function createRobot(host) {
+            return new ReachyMini({ host });
+        }
+
+        function initRobot(host) {
+            if (robot) {
+                if (detachVideo) { detachVideo(); detachVideo = null; }
+                robot.disconnect();
+            }
+            robot = createRobot(host);
+            selectedRobotId = null;
+            updateHostBadge(host);
+            initRobotEvents();
+        }
+
+        function updateHostBadge(host) {
+            document.getElementById('currentHost').textContent = host;
+            document.getElementById('hostInput').value = host;
+        }
+
+        // Export functions for inline onclick handlers
+        window.applyLocalHost = applyLocalHost;
+        window.showSetup = showSetup;
+        window.connectSignaling = connectSignaling;
+        window.startStream = startStream;
+        window.stopStream = stopStream;
+        window.playSound = playSound;
+        window.playSoundPreset = playSoundPreset;
+        window.toggleMute = toggleMute;
+        window.toggleMic = toggleMic;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initRobot(getSavedHost());
+            if (localStorage.getItem(HOST_STORAGE_KEY)) {
+                showMainApp();
+            } else {
+                showLogin();
+            }
+            initSliders();
+        });
+
+        // ===================== Local Setup =====================
+        async function applyLocalHost() {
+            const host = normalizeHost(document.getElementById('hostInput').value);
+            if (!host) return;
+            localStorage.setItem(HOST_STORAGE_KEY, host);
+            initRobot(host);
+            showMainApp();
+            await connectSignaling();
+        }
+
+        function showSetup() {
+            if (detachVideo) { detachVideo(); detachVideo = null; }
+            robot.disconnect();
+            stopLatencyDisplay();
+            showLogin();
+        }
+
+        function showLogin() {
+            document.getElementById('loginView').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
+        function showMainApp() {
+            document.getElementById('loginView').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            updateHostBadge(robot.host);
+        }
+        // ===================== Robot Events =====================
+        function initRobotEvents() {
+            robot.addEventListener('robotsChanged', (e) => displayRobots(e.detail.robots));
+            robot.addEventListener('streaming', () => {
+                updateStatus('connected', 'Connected');
+                enableControls(true);
+                document.getElementById('robotSelector').classList.add('hidden');
+                startLatencyDisplay();
+            });
+            robot.addEventListener('sessionStopped', () => {
+                document.getElementById('startBtn').disabled = !selectedRobotId;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('robotSelector').classList.remove('hidden');
+                enableControls(false);
+                updateStatus('connected', 'Connected');
+                updateMicButton();
+                stopLatencyDisplay();
+            });
+            robot.addEventListener('state', (e) => updateStateDisplay(e.detail));
+            robot.addEventListener('micSupported', () => {
+                enableControls(robot.state === 'streaming');
+            });
+            robot.addEventListener('disconnected', () => {
+                updateStatus('', 'Disconnected');
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('robotSelector').classList.add('hidden');
+            });
+            robot.addEventListener('error', (e) => {
+                console.error(`[${e.detail.source}]`, e.detail.error);
+                if (e.detail.source === 'webrtc') {
+                    updateStatus('', 'Connection lost');
+                }
+            });
+        }
+        // ===================== Connection =====================
+        function updateStatus(status, text) {
+            document.getElementById('statusIndicator').className = 'status-indicator ' + status;
+            document.getElementById('statusText').textContent = text;
+        }
+        async function connectSignaling() {
+            updateStatus('connecting', 'Connecting...');
+            document.getElementById('connectBtn').disabled = true;
+            try {
+                await robot.connect();
+                updateStatus('connected', 'Connected');
+                document.getElementById('robotSelector').classList.remove('hidden');
+            } catch (e) {
+                console.error('Connection failed:', e);
+                updateStatus('', 'Disconnected');
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        function displayRobots(robots) {
+            const list = document.getElementById('robotList');
+            list.innerHTML = '';
+            if (!robots?.length) {
+                list.innerHTML = '<div style="color: var(--text-muted);">No robots online</div>';
+                document.getElementById('startBtn').disabled = true;
+                return;
+            }
+            for (const r of robots) {
+                const div = document.createElement('div');
+                div.className = 'robot-card' + (r.id === selectedRobotId ? ' selected' : '');
+                div.innerHTML = `<div class="name">${r.meta?.name || 'Reachy Mini'}</div><div class="id">${r.id.slice(0, 12)}...</div>`;
+                div.onclick = () => {
+                    document.querySelectorAll('.robot-card').forEach(e => e.classList.remove('selected'));
+                    div.classList.add('selected');
+                    selectedRobotId = r.id;
+                    document.getElementById('robotName').textContent = r.meta?.name || 'Reachy Mini';
+                    document.getElementById('startBtn').disabled = false;
+                };
+                list.appendChild(div);
+            }
+        }
+        // ===================== Latency =====================
+        function startLatencyDisplay() {
+            const badge = document.getElementById('latencyBadge');
+            const label = document.getElementById('latencyValue');
+            badge.classList.remove('hidden');
+            latencyIntervalId = setInterval(async () => {
+                const video = document.getElementById('remoteVideo');
+                let bufLagMs = null;
+                let rttMs = null;
+                let vidJitterMs = null;
+                let audJitterMs = null;
+                // Buffer lag (how far behind live edge)
+                if (video && video.buffered && video.buffered.length > 0) {
+                    const end = video.buffered.end(video.buffered.length - 1);
+                    bufLagMs = Math.round((end - video.currentTime) * 1000);
+                }
+                // WebRTC stats: RTT + jitter buffer delay (video & audio)
+                if (robot._pc) {
+                    try {
+                        const stats = await robot._pc.getStats();
+                        stats.forEach(report => {
+                            if (report.type === 'candidate-pair' && report.currentRoundTripTime != null) {
+                                rttMs = Math.round(report.currentRoundTripTime * 1000);
+                            }
+                            if (report.type === 'inbound-rtp' && report.jitterBufferDelay != null && report.jitterBufferEmittedCount > 0) {
+                                const jMs = Math.round((report.jitterBufferDelay / report.jitterBufferEmittedCount) * 1000);
+                                if (report.kind === 'video') vidJitterMs = jMs;
+                                if (report.kind === 'audio') audJitterMs = jMs;
+                            }
+                        });
+                    } catch (_) { /* no stats yet */ }
+                }
+                // Display
+                const parts = [];
+                if (bufLagMs != null) parts.push(`buf ${bufLagMs}ms`);
+                if (rttMs != null) parts.push(`rtt ${rttMs}ms`);
+                if (vidJitterMs != null) parts.push(`v-jit ${vidJitterMs}ms`);
+                if (audJitterMs != null) parts.push(`a-jit ${audJitterMs}ms`);
+                label.textContent = parts.length ? parts.join(' · ') : '--';
+                // Color based on buffer lag
+                badge.classList.remove('good', 'ok', 'bad');
+                if (bufLagMs != null) {
+                    if (bufLagMs < 200) badge.classList.add('good');
+                    else if (bufLagMs < 500) badge.classList.add('ok');
+                    else badge.classList.add('bad');
+                }
+            }, 1000);
+        }
+        function stopLatencyDisplay() {
+            if (latencyIntervalId) { clearInterval(latencyIntervalId); latencyIntervalId = null; }
+            const badge = document.getElementById('latencyBadge');
+            badge.classList.add('hidden');
+            badge.classList.remove('good', 'ok', 'bad');
+        }
+        // ===================== Session =====================
+        async function startStream() {
+            if (!selectedRobotId) return;
+            updateStatus('connecting', 'Connecting...');
+            updateMuteButton();
+            detachVideo = robot.attachVideo(document.getElementById('remoteVideo'));
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            try {
+                await robot.wakeUp();
+                await robot.startSession(selectedRobotId);
+            } catch (e) {
+                console.error('Session failed:', e);
+                if (detachVideo) { detachVideo(); detachVideo = null; }
+                document.getElementById('startBtn').disabled = !selectedRobotId;
+                document.getElementById('stopBtn').disabled = true;
+                updateStatus('connected', 'Connected');
+            }
+        }
+        async function stopStream() {
+            if (detachVideo) { detachVideo(); detachVideo = null; }
+            await robot.stopSession();
+            await robot.sleep();
+        }
+        // ===================== Audio =====================
+        function toggleMute() {
+            robot.setAudioMuted(!robot.audioMuted);
+            updateMuteButton();
+        }
+        function toggleMic() {
+            robot.setMicMuted(!robot.micMuted);
+            updateMicButton();
+        }
+        function updateMuteButton() {
+            const muted = robot.audioMuted;
+            const btn = document.getElementById('muteBtn');
+            btn.classList.toggle('muted', muted);
+            document.getElementById('speakerOffIcon').classList.toggle('hidden', !muted);
+            document.getElementById('speakerOnIcon').classList.toggle('hidden', muted);
+            document.getElementById('muteText').textContent = muted ? 'Unmute' : 'Mute';
+        }
+        function updateMicButton() {
+            const muted = robot.micMuted;
+            const btn = document.getElementById('micBtn');
+            btn.classList.toggle('muted', muted);
+            document.getElementById('micOffIcon').classList.toggle('hidden', !muted);
+            document.getElementById('micOnIcon').classList.toggle('hidden', muted);
+            document.getElementById('micText').textContent = muted ? 'Mic Off' : 'Mic On';
+        }
+        function enableControls(enabled) {
+            document.getElementById('btnPlaySound').disabled = !enabled;
+            document.getElementById('muteBtn').disabled = !enabled;
+            document.getElementById('micBtn').disabled = !enabled || !robot.micSupported;
+        }
+        // ===================== State Display =====================
+        function updateStateDisplay(state) {
+            if (state.head && !headSlidersActive) {
+                document.getElementById('rollSlider').value = state.head.roll;
+                document.getElementById('rollValue').textContent = state.head.roll.toFixed(1) + '°';
+                document.getElementById('pitchSlider').value = state.head.pitch;
+                document.getElementById('pitchValue').textContent = state.head.pitch.toFixed(1) + '°';
+                document.getElementById('yawSlider').value = state.head.yaw;
+                document.getElementById('yawValue').textContent = state.head.yaw.toFixed(1) + '°';
+            }
+            if (state.antennas) {
+                const r = state.antennas.right.toFixed(0);
+                const l = state.antennas.left.toFixed(0);
+                document.getElementById('rightAntSlider').value = r;
+                document.getElementById('rightAntValue').textContent = r + '°';
+                document.getElementById('leftAntSlider').value = l;
+                document.getElementById('leftAntValue').textContent = l + '°';
+            }
+        }
+        // ===================== Sliders =====================
+        function initSliders() {
+            // Head
+            const rollSlider = document.getElementById('rollSlider');
+            const pitchSlider = document.getElementById('pitchSlider');
+            const yawSlider = document.getElementById('yawSlider');
+            const rollValue = document.getElementById('rollValue');
+            const pitchValue = document.getElementById('pitchValue');
+            const yawValue = document.getElementById('yawValue');
+            function sendHeadPose() {
+                robot.setHeadPose(
+                    parseFloat(rollSlider.value),
+                    parseFloat(pitchSlider.value),
+                    parseFloat(yawSlider.value),
+                );
+            }
+            const onStart = () => { headSlidersActive = true; };
+            const onEnd = () => { headSlidersActive = false; };
+            for (const s of [rollSlider, pitchSlider, yawSlider]) {
+                s.addEventListener('mousedown', onStart);
+                s.addEventListener('touchstart', onStart);
+                s.addEventListener('mouseup', onEnd);
+                s.addEventListener('touchend', onEnd);
+            }
+            rollSlider.addEventListener('input', () => { rollValue.textContent = parseFloat(rollSlider.value).toFixed(1) + '°'; sendHeadPose(); });
+            pitchSlider.addEventListener('input', () => { pitchValue.textContent = parseFloat(pitchSlider.value).toFixed(1) + '°'; sendHeadPose(); });
+            yawSlider.addEventListener('input', () => { yawValue.textContent = parseFloat(yawSlider.value).toFixed(1) + '°'; sendHeadPose(); });
+            // Antennas
+            const rightSlider = document.getElementById('rightAntSlider');
+            const leftSlider = document.getElementById('leftAntSlider');
+            const rightAntValue = document.getElementById('rightAntValue');
+            const leftAntValue = document.getElementById('leftAntValue');
+            rightSlider.addEventListener('input', () => {
+                rightAntValue.textContent = rightSlider.value + '°';
+                robot.setAntennas(parseFloat(rightSlider.value), parseFloat(leftSlider.value));
+            });
+            leftSlider.addEventListener('input', () => {
+                leftAntValue.textContent = leftSlider.value + '°';
+                robot.setAntennas(parseFloat(rightSlider.value), parseFloat(leftSlider.value));
+            });
+        }
+        // ===================== Sound =====================
+        function playSound() {
+            const file = document.getElementById('soundInput').value.trim();
+            if (file) robot.playSound(file);
+        }
+        function playSoundPreset(file) {
+            document.getElementById('soundInput').value = file;
+            robot.playSound(file);
+        }
+    </script>
+</body>
+</html>
